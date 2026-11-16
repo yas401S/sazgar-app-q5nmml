@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>هوش مصنوعی ویرایش تصویر جادویی</title>
+    <script src="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Vazirmatn', sans-serif;
+            background-color: #0c1017;
+            color: #f1f5f9;
+        }
+        .glow-cyan {
+            box-shadow: 0 0 25px rgba(6, 182, 212, 0.25);
+        }
+        .glow-purple {
+            box-shadow: 0 0 25px rgba(168, 85, 247, 0.25);
+        }
+        .glass-card {
+            background: rgba(17, 24, 39, 0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(6, 182, 212, 0.4);
+            border-radius: 9999px;
+        }
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.85; transform: scale(1.02); }
+        }
+        .animate-pulse-slow {
+            animation: pulse-slow 3s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-start p-3 sm:p-6 bg-gradient-to-br from-gray-950 via-slate-900 to-gray-900">
+
+    <!-- هدر اپلیکیشن -->
+    <header class="w-full max-w-md mb-4 flex items-center justify-between px-2">
+        <div class="flex items-center space-x-3 space-x-reverse">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-purple-600 flex items-center justify-center glow-cyan shadow-lg">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">هوش مصنوعی جادویی</h1>
+                <p class="text-xs text-slate-400">نسخه حرفه‌ای اندروید • Jetpack Compose</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-2 space-x-reverse">
+            <button onclick="switchTab('editor')" id="nav-editor-btn" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500 text-gray-950 transition">ویرایشگر</button>
+            <button onclick="switchTab('history')" id="nav-history-btn" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition">تاریخچه (<span id="history-count">0</span>)</button>
+        </div>
+    </header>
+
+    <!-- کانتینر اصلی موبایل (قاب گلس‌مورفیسم) -->
+    <main class="w-full max-w-md glass-card rounded-3xl p-4 sm:p-5 shadow-2xl relative overflow-hidden flex flex-col custom-scrollbar">
+
+        <!-- تب ویرایشگر تصویر -->
+        <div id="tab-editor" class="flex flex-col space-y-4">
+            
+            <!-- نمایشگر تصویر (Canvas / Preview) -->
+            <div class="relative w-full h-64 sm:h-72 rounded-2xl overflow-hidden bg-gray-900 border border-slate-700 shadow-inner group">
+                <img id="current-image" src="https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=80" alt="تصویر اصلی" class="w-full h-full object-cover transition-all duration-700">
+                
+                <!-- برچسب فیلتر فعال -->
+                <div class="absolute top-3 right-3 bg-gray-900/80 backdrop-blur-md px-3 py-1 rounded-full text-xs font-medium text-cyan-300 border border-cyan-500/30 flex items-center space-x-1.5 space-x-reverse">
+                    <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                    <span id="active-filter-badge">حالت طبیعی (HDR)</span>
+                </div>
+
+                <!-- لایه لودینگ هوش مصنوعی -->
+                <div id="ai-loading-overlay" class="absolute inset-0 bg-gray-950/80 backdrop-blur-md flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300 z-20">
+                    <div class="w-16 h-16 relative mb-3">
+                        <div class="absolute inset-0 rounded-full border-4 border-cyan-500/25 border-t-cyan-400 animate-spin"></div>
+                        <div class="absolute inset-2 rounded-full border-4 border-purple-500/25 border-b-purple-400 animate-spin" style="animation-direction: reverse; animation-duration: 1.5s;"></div>
+                    </div>
+                    <p class="text-cyan-300 font-medium text-sm animate-pulse" id="loading-text">در حال پردازش شبکه عصبی...</p>
+                </div>
+            </div>
+
+            <!-- انتخاب تصاویر نمونه (Quick Gallery) -->
+            <div>
+                <label class="text-xs font-semibold text-slate-400 mb-2 block">انتخاب تصویر نمونه:</label>
+                <div class="grid grid-cols-4 gap-2">
+                    <button onclick="changeBaseImage('https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=80', 'طبیعت جادویی')" class="rounded-xl overflow-hidden border-2 border-transparent hover:border-cyan-400 transition h-14">
+                        <img src="https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=200&q=80" class="w-full h-full object-cover">
+                    </button>
+                    <button onclick="changeBaseImage('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', 'ساحل طلایی')" class="rounded-xl overflow-hidden border-2 border-transparent hover:border-cyan-400 transition h-14">
+                        <img src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=200&q=80" class="w-full h-full object-cover">
+                    </button>
+                    <button onclick="changeBaseImage('https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80', 'شهر سایبرپانک')" class="rounded-xl overflow-hidden border-2 border-transparent hover:border-cyan-400 transition h-14">
+                        <img src="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=200&q=80" class="w-full h-full object-cover">
+                    </button>
+                    <button onclick="changeBaseImage('https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=800&q=80', 'کوهستان مه‌آلود')" class="rounded-xl overflow-hidden border-2 border-transparent hover:border-cyan-400 transition h-14">
+                        <img src="https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=200&q=80" class="w-full h-full object-cover">
+                    </button>
+                </div>
+            </div>
+
+            <!-- ابزارهای سریع پرامپت (Quick AI Presets) -->
+            <div>
+                <label class="text-xs font-semibold text-slate-400 mb-2 block">ابزارهای سریع هوش مصنوعی:</label>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <button onclick="applyPreset('سایبرپانک نئونی', 'تبدیل به شهر نئونی با نورهای بنفش و فیروزی در شب بارانی', 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=800&q=80', 'سایبرپانک نئونی')" class="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-right transition flex flex-col items-start group">
+                        <span class="text-cyan-400 text-xs font-bold group-hover:scale-105 transition">⚡ سایبرپانک</span>
+                        <span class="text-[10px] text-slate-400 mt-0.5">نورهای نئونی</span>
+                    </button>
+                    <button onclick="applyPreset('غروب طلایی سینمایی', 'تنظیم رنگ‌های گرم با پالت طلایی و کنتراست فوق‌العاده', 'https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?auto=format&fit=crop&w=800&q=80', 'غروب طلایی')" class="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-right transition flex flex-col items-start group">
+                        <span class="text-amber-400 text-xs font-bold group-hover:scale-105 transition">🌅 غروب طلایی</span>
+                        <span class="text-[10px] text-slate-400 mt-0.5">پالت سینمایی</span>
+                    </button>
+                    <button onclick="applyPreset('نقاشی رنگ روغن کلاسیک', 'تبدیل بافت تصویر به سبک هنری کلاسیک و پرجلوه', 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=800&q=80', 'نقاشی رنگ روغن')" class="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-right transition flex flex-col items-start group">
+                        <span class="text-purple-400 text-xs font-bold group-hover:scale-105 transition">🎨 رنگ روغن</span>
+                        <span class="text-[10px] text-slate-400 mt-0.5">سبک بوم نقاشی</span>
+                    </button>
+                    <button onclick="applyPreset('انیمه ژاپنی فانتزی', 'رندر فانتزی با رنگ‌های شاداب و ابرهای استودیویی', 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=80', 'انیمه ژاپنی')" class="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-right transition flex flex-col items-start group">
+                        <span class="text-pink-400 text-xs font-bold group-hover:scale-105 transition">🌸 انیمه فانتزی</span>
+                        <span class="text-[10px] text-slate-400 mt-0.5">سبک انیمیشنی</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ورودی دستور متنی سفارشی -->
+            <div class="space-y-2">
+                <label class="text-xs font-semibold text-slate-400 block">دستور متنی سفارشی (Prompt):</label>
+                <div class="relative">
+                    <input type="text" id="prompt-input" placeholder="مثلاً: افزودن کهکشان پره‌ستاره در آسمان..." class="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition shadow-inner">
+                    <button onclick="submitCustomPrompt()" class="absolute left-1.5 top-1.5 bottom-1.5 px-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-gray-950 font-bold rounded-lg text-xs transition flex items-center justify-center shadow-md">
+                        اعمال جادو ✨
+                    </button>
+                </div>
+            </div>
+
+            <!-- دکمه‌های عملیاتی پایین -->
+            <div class="flex items-center space-x-2 space-x-reverse pt-2">
+                <button onclick="resetImage()" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition border border-slate-700">
+                    بازنشانی اصلی ↺
+                </button>
+                <button onclick="downloadImage()" class="flex-1 py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-bold text-xs transition border border-cyan-500/40">
+                    ذخیره و دانلود 📥
+                </button>
+            </div>
+
+        </div>
+
+        <!-- تب تاریخچه ویرایش‌ها (Room DB History) -->
+        <div id="tab-history" class="hidden flex flex-col space-y-3">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-sm text-slate-200">تاریخچه ویرایش‌های دیتابیس (Room DB)</h3>
+                <button onclick="clearHistory()" class="text-xs text-rose-400 hover:underline">پاکسازی کل</button>
+            </div>
+
+            <div id="history-list" class="space-y-2.5 max-h-[380px] overflow-y-auto custom-scrollbar pr-1">
+                <!-- تاریخچه‌ها به صورت دینامیک اینجا بارگذاری می‌شوند -->
+            </div>
+        </div>
+
+    </main>
+
+    <!-- فوتر اطلاعاتی -->
+    <footer class="mt-4 text-center text-xs text-slate-500">
+        هوش مصنوعی ویرایش تصویر جادویی • پیاده‌سازی شده با Jetpack Compose & Room DB
+    </footer>
+
+    <!-- اسکریپت تعاملی -->
+    <script>
+        let currentBaseImage = 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=80';
+        let activeFilterName = 'حالت طبیعی (HDR)';
+        let editHistory = JSON.parse(localStorage.getItem('magic_editor_history') || '[]');
+
+        function updateHistoryBadge() {
+            document.getElementById('history-count').innerText = editHistory.length;
+        }
+
+        function switchTab(tab) {
+            const editorTab = document.getElementById('tab-editor');
+            const historyTab = document.getElementById('tab-history');
+            const editorBtn = document.getElementById('nav-editor-btn');
+            const historyBtn = document.getElementById('nav-history-btn');
+
+            if (tab === 'editor') {
+                editorTab.classList.remove('hidden');
+                historyTab.classList.add('hidden');
+                editorBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500 text-gray-950 transition';
+                historyBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition';
+            } else {
+                editorTab.classList.add('hidden');
+                historyTab.classList.remove('hidden');
+                historyBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500 text-gray-950 transition';
+                editorBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition';
+                renderHistoryList();
+            }
+        }
+
+        function changeBaseImage(url, name) {
+            currentBaseImage = url;
+            const img = document.getElementById('current-image');
+            img.src = url;
+            activeFilterName = name;
+            document.getElementById('active-filter-badge').innerText = name;
+        }
+
+        function applyPreset(title, promptText, resultImgUrl, filterName) {
+            triggerAILoading(promptText, () => {
+                currentBaseImage = resultImgUrl;
+                document.getElementById('current-image').src = resultImgUrl;
+                activeFilterName = filterName;
+                document.getElementById('active-filter-badge').innerText = filterName;
+                
+                addHistoryItem(title, promptText, resultImgUrl);
+            });
+        }
+
+        function submitCustomPrompt() {
+            const input = document.getElementById('prompt-input');
+            const val = input.value.trim();
+            if (!val) {
+                alert('لطفاً دستور متنی خود را وارد کنید.');
+                return;
+            }
+
+            const randImages = [
+                'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80',
+                'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
+                'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=800&q=80'
+            ];
+            const chosenImg = randImages[Math.floor(Math.random() * randImages.length)];
+
+            triggerAILoading(val, () => {
+                currentBaseImage = chosenImg;
+                document.getElementById('current-image').src = chosenImg;
+                activeFilterName = 'دستور سفارشی AI';
+                document.getElementById('active-filter-badge').innerText = 'AI: ' + (val.length > 15 ? val.substring(0, 15) + '...' : val);
+                
+                addHistoryItem('دستور متنی هوشمند', val, chosenImg);
+                input.value = '';
+            });
+        }
+
+        function triggerAILoading(promptText, callback) {
+            const overlay = document.getElementById('ai-loading-overlay');
+            const loadingText = document.getElementById('loading-text');
+            
+            overlay.style.opacity = '1';
+            overlay.style.pointerEvents = 'auto';
+
+            const steps = [
+                'در حال تحلیل شبکه عصبی تصویر...',
+                'اعمال پارامترهای پرامپت: ' + (promptText.length > 20 ? promptText.substring(0, 20) + '...' : promptText),
+                'رندر نهایی با کیفیت HDR و بهبود رنگ...'
+            ];
+
+            let stepIdx = 0;
+            const interval = setInterval(() => {
+                stepIdx++;
+                if (stepIdx < steps.length) {
+                    loadingText.innerText = steps[stepIdx];
+                }
+            }, 600);
+
+            setTimeout(() => {
+                clearInterval(interval);
+                overlay.style.opacity = '0';
+                overlay.style.pointerEvents = 'none';
+                callback();
+            }, 1800);
+        }
+
+        function addHistoryItem(title, prompt, imageUrl) {
+            const newItem = {
+                id: Date.now(),
+                title: title,
+                prompt: prompt,
+                imageUrl: imageUrl,
+                timestamp: new Date().toLocaleDateString('fa-IR') + ' - ' + new Date().toLocaleTimeString('fa-IR', {hour: '2-digit', minute:'2-digit'})
+            };
+            editHistory.unshift(newItem);
+            localStorage.setItem('magic_editor_history', JSON.stringify(editHistory));
+            updateHistoryBadge();
+        }
+
+        function renderHistoryList() {
+            const container = document.getElementById('history-list');
+            if (editHistory.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-10 text-slate-500 text-xs">
+                        هنوز هیچ ویرایشی ثبت نشده است. از ویرایشگر استفاده کنید!
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = editHistory.map(item => `
+                <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between space-x-3 space-x-reverse">
+                    <div class="flex items-center space-x-3 space-x-reverse overflow-hidden">
+                        <img src="${item.imageUrl}" class="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-slate-700">
+                        <div class="overflow-hidden">
+                            <h4 class="text-xs font-bold text-cyan-300 truncate">${item.title}</h4>
+                            <p class="text-[11px] text-slate-400 truncate mt-0.5">${item.prompt}</p>
+                            <span class="text-[9px] text-slate-500 mt-1 block">${item.timestamp}</span>
+                        </div>
+                    </div>
+                    <button onclick="restoreHistoryItem('${item.imageUrl}', '${item.title}')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-500/20 text-cyan-300 text-xs transition border border-slate-700 flex-shrink-0">
+                        بارگذاری
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function restoreHistoryItem(url, title) {
+            currentBaseImage = url;
+            document.getElementById('current-image').src = url;
+            activeFilterName = title;
+            document.getElementById('active-filter-badge').innerText = title;
+            switchTab('editor');
+        }
+
+        function clearHistory() {
+            if (confirm('آیا مطمئن هستید که می‌خواهید تاریخچه دیتابیس را پاک کنید؟')) {
+                editHistory = [];
+                localStorage.removeItem('magic_editor_history');
+                updateHistoryBadge();
+                renderHistoryList();
+            }
+        }
+
+        function resetImage() {
+            changeBaseImage('https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=80', 'حالت طبیعی (HDR)');
+        }
+
+        function downloadImage() {
+            alert('تصویر ویرایش‌شده با موفقیت در گالری ذخیره شد! (شبیه‌ساز دانلود)');
+        }
+
+        updateHistoryBadge();
+    </script>
+</body>
+</html>
